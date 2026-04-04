@@ -2,12 +2,11 @@ from flask import Blueprint, request, jsonify
 from models.database import get_db
 from utils.auth_helper import token_required
 from utils.limiter import limiter
-from config import Config
+from config import get_gemini_key
 import google.generativeai as genai
 import json
 
 analysis_bp = Blueprint("analysis", __name__)
-genai.configure(api_key=Config.GEMINI_API_KEY)
 
 
 @analysis_bp.route("/spending", methods=["POST"])
@@ -134,6 +133,7 @@ Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yaz
 """
 
     try:
+        genai.configure(api_key=get_gemini_key())
         model    = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
         text     = response.text.strip()
