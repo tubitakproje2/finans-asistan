@@ -12,24 +12,26 @@ genai.configure(api_key=Config.GEMINI_API_KEY)
 @investment_bp.route("/recommend", methods=["POST"])
 @token_required
 def recommend(user_id):
-    data  = request.get_json()
-    month = data.get("month")
-    year  = data.get("year")
+    data         = request.get_json()
+    month        = data.get("month")
+    year         = data.get("year")
+    risk_profile = data.get("risk_profile")
 
     if not month or not year:
         return jsonify({"error": "month ve year zorunlu"}), 400
 
     db = get_db()
 
-    # Kullanıcı bilgileri
     user_result = db.table("users").select("monthly_income, risk_profile, full_name").eq("id", user_id).execute()
     if not user_result.data:
         return jsonify({"error": "Kullanıcı bulunamadı"}), 404
     user = user_result.data[0]
 
-    # Bu ayın işlemleri
+    # Android'den gelen risk_profile öncelikli, yoksa DB'deki kullan
+    risk_profile = risk_profile or user.get("risk_profile", "balanced")
+
     start_date = f"{year}-{month:02d}-01"
-    end_date   = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+    end_date   = f"{year + 1}-01-01" if month == 12 else f"{year}-{month + 1:02d}-01"
 
     tx_result = db.table("transactions") \
         .select("*") \
@@ -46,56 +48,59 @@ def recommend(user_id):
     total_expense = sum(t["amount"] for t in transactions if t["transaction_type"] == "EXPENSE")
     net           = total_income - total_expense
 
-    # Kategori bazlı harcama özeti
     category_breakdown = {}
     for t in transactions:
         if t["transaction_type"] == "EXPENSE":
             name = t["category_name"]
             if name not in category_breakdown:
                 category_breakdown[name] = {"total": 0, "count": 0, "icon": t["category_icon"]}
-            category_breakdown[name]["total"]  += t["amount"]
-            category_breakdown[name]["count"]  += 1
+            category_breakdown[name]["total"] += t["amount"]
+            category_breakdown[name]["count"] += 1
 
     categories_text = "\n".join([
         f"- {name}: {v['total']:.2f} TL ({v['count']} işlem)"
         for name, v in sorted(category_breakdown.items(), key=lambda x: -x[1]["total"])
     ])
 
-    # Tasarruf potansiyeli olan kategoriler (harcamanın %30'undan fazlası)
-    saveable = {
-        name: v for name, v in category_breakdown.items()
-        if v["total"] > total_expense * 0.30
+    risk_labels = {
+        "conservative": "Tutumlu",
+        "balanced":     "Dengeli",
+        "aggressive":   "Agresif"
     }
-
-    risk_profile = user.get("risk_profile", "balanced")
+    risk_label = risk_labels.get(risk_profile, "Dengeli")
 
     prompt = f"""
 Sen bir kişisel finans danışmanısın. Kullanıcının {month}/{year} ayı verilerine göre yatırım önerisi oluştur.
 
 Kullanıcı Bilgileri:
 - Aylık Gelir: {user.get('monthly_income', total_income):.2f} TL
-- Risk Profili: {risk_profile}
+- Risk Profili: {risk_profile} ({risk_label})
 
 Bu Ay Özeti:
 - Toplam Gelir: {total_income:.2f} TL
 - Toplam Gider: {total_expense:.2f} TL
-- Kalan (Yatırılabilir): {net:.2f} TL
+- Yatırılabilir Tutar: {net:.2f} TL
 
 Kategori Bazlı Harcamalar:
 {categories_text}
 
-Risk profiline göre yatırım dağılımı rehberi:
+Risk profiline göre yatırım dağılımı (kesinlikle bu profile uy):
 - conservative (tutumlu): BIST %20, ETF %30, acil_fon %50
-- balanced (dengeli): BIST %50, ETF %40, acil_fon %10
-- aggressive (agresif): BIST %70, ETF %25, acil_fon %5
+- balanced (dengeli):     BIST %50, ETF %40, acil_fon %10
+- aggressive (agresif):   BIST %70, ETF %25, acil_fon %5
+
+Projeksiyon hesabı için yıllık getiri oranları:
+- conservative: %15
+- balanced:     %22
+- aggressive:   %30
 
 Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:
 {{
   "investable_amount": {net:.2f},
   "distribution": {{
-    "bist_percentage": 50,
-    "etf_percentage": 40,
-    "emergency_percentage": 10
+    "bist_percentage": 0,
+    "etf_percentage": 0,
+    "emergency_percentage": 0
   }},
   "amounts": {{
     "bist": 0.0,
@@ -115,11 +120,11 @@ Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yaz
       "suggested_spending": 0.0,
       "monthly_saving": 0.0,
       "yearly_saving": 0.0,
-      "message": "Bu parayı X yatırıma çevirirsen yıllık Y TL kazanabilirsin"
+      "message": "Bu parayı yatırıma çevirirsen yıllık X TL kazanabilirsin"
     }}
   ],
-  "risk_summary": "Risk profili ve strateji hakkında 2 cümle",
-  "ai_comment": "Kullanıcıya özel motivasyon cümlesi"
+  "risk_summary": "{risk_label} profili için 2 cümlelik strateji açıklaması",
+  "ai_comment": "Kullanıcıya özel motivasyon cümlesi, TL tutarları somut olsun"
 }}
 """
 
