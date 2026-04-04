@@ -10,10 +10,12 @@ def create_app():
     from auth.routes import auth_bp
     from transactions.routes import transactions_bp
     from analysis.routes import analysis_bp
+    from budget.routes import budget_bp
 
-    app.register_blueprint(auth_bp, url_prefix="/auth")
-    app.register_blueprint(transactions_bp, url_prefix="/transactions")
-    app.register_blueprint(analysis_bp, url_prefix="/analysis")
+    app.register_blueprint(auth_bp,          url_prefix="/auth")
+    app.register_blueprint(transactions_bp,  url_prefix="/transactions")
+    app.register_blueprint(analysis_bp,      url_prefix="/analysis")
+    app.register_blueprint(budget_bp,        url_prefix="/budget")
 
     @app.route("/health")
     def health():
