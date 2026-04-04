@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from models.database import get_db
 from utils.auth_helper import token_required
+from utils.limiter import limiter
 from config import Config
 import google.generativeai as genai
 import json
@@ -11,10 +12,11 @@ genai.configure(api_key=Config.GEMINI_API_KEY)
 
 @analysis_bp.route("/spending", methods=["POST"])
 @token_required
+@limiter.limit("5 per minute; 20 per hour")
 def analyze_spending(user_id):
-    data  = request.get_json()
-    month = data.get("month")
-    year  = data.get("year")
+    data         = request.get_json()
+    month        = data.get("month")
+    year         = data.get("year")
     budget_plans = data.get("budget_plans", [])
 
     if not month or not year:
