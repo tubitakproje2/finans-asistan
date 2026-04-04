@@ -1,11 +1,13 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
+from utils.limiter import limiter
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     CORS(app)
+    limiter.init_app(app)
 
     from auth.routes import auth_bp
     from transactions.routes import transactions_bp
@@ -22,6 +24,10 @@ def create_app():
     @app.route("/health")
     def health():
         return {"status": "ok"}, 200
+
+    @app.errorhandler(429)
+    def rate_limit_exceeded(e):
+        return jsonify({"error": "Çok fazla istek gönderdiniz. Lütfen bekleyin."}), 429
 
     return app
 
