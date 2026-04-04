@@ -64,7 +64,8 @@ def analyze_spending(user_id):
         for name, v in sorted(category_breakdown.items(), key=lambda x: -x[1]["total"])
     ])
 
-    budget_text = ""
+    budget_text     = ""
+    budget_overruns = []
     if budget_plans:
         budget_lines = []
         for bp in budget_plans:
@@ -73,12 +74,17 @@ def analyze_spending(user_id):
             actual    = category_breakdown.get(cat_name, {}).get("total", 0)
             usage_pct = (actual / limit * 100) if limit > 0 else 0
             status    = "AŞILDI ⚠️" if actual > limit else "normal ✅"
+            if actual > limit:
+                budget_overruns.append(cat_name)
             budget_lines.append(
                 f"- {cat_name}: Limit {limit:.2f} TL | Harcanan {actual:.2f} TL | %{usage_pct:.0f} kullanım | {status}"
             )
         budget_text = "Bütçe Limiti Karşılaştırması:\n" + "\n".join(budget_lines)
     else:
         budget_text = "Bütçe limiti girilmemiş."
+
+    overrun_count  = len(budget_overruns)
+    category_count = len(category_breakdown)
 
     prompt = f"""
 Sen bir kişisel finans asistanısın. Kullanıcının {month}/{year} ayı harcama verilerini analiz et ve Türkçe yanıt ver.
@@ -92,13 +98,60 @@ Bu Ay Özeti:
 - Toplam Gider: {total_expense:.2f} TL
 - Net: {net:.2f} TL
 - Tasarruf Oranı: %{savings_rate:.1f}
+- Bütçe Aşılan Kategori Sayısı: {overrun_count}
+- Harcama Yapılan Kategori Sayısı: {category_count}
 
 Kategori Bazlı Harcamalar:
 {categories_text}
 
 {budget_text}
 
-Önemli kurallar:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FİNANSAL SAĞLIK SKORU HESAPLAMA KURALLARI (0-100):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Aşağıdaki 4 faktörü değerlendirerek 0-100 arası bir skor üret:
+
+1. TASARRUF ORANI (%35 ağırlık):
+   - %20+ tasarruf → 35 puan
+   - %10-20        → 25 puan
+   - %5-10         → 15 puan
+   - %0-5          → 8 puan
+   - Negatif       → 0 puan
+
+2. BÜTÇE DİSİPLİNİ (%25 ağırlık):
+   - Bütçe girilmemiş → 20 puan (nötr)
+   - 0 aşım           → 25 puan
+   - 1 aşım           → 18 puan
+   - 2 aşım           → 10 puan
+   - 3+ aşım          → 3 puan
+
+3. GELİR/GİDER DENGESİ (%20 ağırlık):
+   - Gider < Gelirin %70'i  → 20 puan
+   - Gider < Gelirin %85'i  → 14 puan
+   - Gider < Gelirin %95'i  → 8 puan
+   - Gider >= Gelir         → 0 puan
+
+4. HARCAMA ÇEŞİTLİLİĞİ (%20 ağırlık):
+   - 5+ farklı kategori → 20 puan
+   - 3-4 kategori       → 14 puan
+   - 1-2 kategori       → 8 puan
+
+Skor etiket ve renk eşlemesi:
+- 0-40   → label: "Kritik",   color: "#ef4444"
+- 41-65  → label: "Orta",     color: "#f59e0b"
+- 66-85  → label: "İyi",      color: "#22c55e"
+- 86-100 → label: "Mükemmel", color: "#6366f1"
+
+health_comment: Maksimum 10 kelime. En önemli güçlü veya zayıf noktayı belirt.
+Örnekler:
+- "Tasarruf oranın harika, bütçe disiplinine dikkat et"
+- "Market bütçesini aştın, diğer alanlarda dengeli gidiyorsun"
+- "Giderlerin gelirine çok yakın, tasarrufa odaklan"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DİĞER ÖNERİ KURALLARI:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Bütçe aşımı varsa o kategoriye HIGH öncelikli öneri yaz, somut TL tutarı ver
 - "X kategorisinde limitini Y TL aştın, bunu Z'ye düşürürsen yıllık W TL tasarruf edersin" formatında yaz
 - Bütçe limitini aşmayan kategoriler için MEDIUM veya LOW öneri ver
@@ -111,6 +164,10 @@ Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yaz
   "total_income": {total_income},
   "total_expense": {total_expense},
   "net_amount": {net},
+  "health_score": 0,
+  "health_label": "Kritik veya Orta veya İyi veya Mükemmel",
+  "health_color": "#hex renk kodu",
+  "health_comment": "max 10 kelime açıklama",
   "category_breakdown": [
     {{
       "category_name": "kategori adı",
@@ -145,6 +202,15 @@ Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yaz
             text = text.strip()
 
         result = json.loads(text)
+
+        # Güvenlik: health_score 0-100 arasında olmalı
+        score = result.get("health_score", 0)
+        if not isinstance(score, (int, float)) or not (0 <= score <= 100):
+            result["health_score"]   = 0
+            result["health_label"]   = "Kritik"
+            result["health_color"]   = "#ef4444"
+            result["health_comment"] = "Skor hesaplanamadı"
+
         return jsonify(result), 200
 
     except Exception as e:
