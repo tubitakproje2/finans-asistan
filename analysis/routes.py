@@ -134,7 +134,7 @@ Lütfen SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yaz
 
     try:
         genai.configure(api_key=get_gemini_key())
-        model    = genai.GenerativeModel("gemini-1.5-flash")
+        model    = genai.GenerativeModel("gemini-3-flash-preview")
         response = model.generate_content(prompt)
         text     = response.text.strip()
 
