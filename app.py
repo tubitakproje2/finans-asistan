@@ -11,11 +11,13 @@ def create_app():
     from transactions.routes import transactions_bp
     from analysis.routes import analysis_bp
     from budget.routes import budget_bp
+    from investment.routes import investment_bp
 
-    app.register_blueprint(auth_bp,          url_prefix="/auth")
-    app.register_blueprint(transactions_bp,  url_prefix="/transactions")
-    app.register_blueprint(analysis_bp,      url_prefix="/analysis")
-    app.register_blueprint(budget_bp,        url_prefix="/budget")
+    app.register_blueprint(auth_bp,         url_prefix="/auth")
+    app.register_blueprint(transactions_bp, url_prefix="/transactions")
+    app.register_blueprint(analysis_bp,     url_prefix="/analysis")
+    app.register_blueprint(budget_bp,       url_prefix="/budget")
+    app.register_blueprint(investment_bp,   url_prefix="/investment")
 
     @app.route("/health")
     def health():
