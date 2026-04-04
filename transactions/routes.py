@@ -17,7 +17,7 @@ def add_transaction(user_id):
     amount           = data.get("amount")
     description      = data.get("description", "")
     transaction_date = data.get("transaction_date")
-    transaction_type = data.get("transaction_type")
+    transaction_type = data.get("transaction_type", "").upper()
     payment_method   = data.get("payment_method", "bank_card")
 
     if not all([category_id, amount, transaction_date, transaction_type]):
@@ -70,8 +70,8 @@ def get_transactions(user_id):
         .execute()
 
     transactions  = result.data
-    total_income  = sum(t["amount"] for t in transactions if t["transaction_type"] == "INCOME")
-    total_expense = sum(t["amount"] for t in transactions if t["transaction_type"] == "EXPENSE")
+    total_income  = sum(t["amount"] for t in transactions if t["transaction_type"].upper() == "INCOME")
+    total_expense = sum(t["amount"] for t in transactions if t["transaction_type"].upper() == "EXPENSE")
 
     return jsonify({
         "transactions":  transactions,
@@ -128,7 +128,7 @@ def sync_transactions(user_id):
                 "amount":           t.get("amount"),
                 "description":      t.get("description", ""),
                 "transaction_date": t.get("transaction_date"),
-                "transaction_type": t.get("transaction_type"),
+                "transaction_type": t.get("transaction_type", "").upper(),
                 "payment_method":   t.get("payment_method", "bank_card")
             }).execute()
             synced += 1
