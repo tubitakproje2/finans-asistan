@@ -34,7 +34,7 @@ def analyze_spending(user_id):
 
     transactions = transactions_result.data
     if not transactions:
-        return jsonify({"error": "Bu ay için işlem bulunamadı"}), 404
+        return jsonify({"error": "Bu ay için işlem bulunamadı"}), 200
 
     user_result = db.table("users").select("monthly_income, risk_profile").eq("id", user_id).execute()
     user = user_result.data[0] if user_result.data else {}
@@ -63,7 +63,6 @@ def analyze_spending(user_id):
         for name, v in sorted(category_breakdown.items(), key=lambda x: -x[1]["total"])
     ])
 
-    # Bütçe karşılaştırma metni
     budget_text = ""
     if budget_plans:
         budget_lines = []
