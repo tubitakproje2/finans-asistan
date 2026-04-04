@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from models.database import get_db
 from utils.auth_helper import token_required
+from utils.limiter import limiter
 from config import Config
 import google.generativeai as genai
 import json
@@ -11,6 +12,7 @@ genai.configure(api_key=Config.GEMINI_API_KEY)
 
 @investment_bp.route("/recommend", methods=["POST"])
 @token_required
+@limiter.limit("5 per minute; 20 per hour")
 def recommend(user_id):
     data         = request.get_json()
     month        = data.get("month")
@@ -27,7 +29,6 @@ def recommend(user_id):
         return jsonify({"error": "Kullanıcı bulunamadı"}), 404
     user = user_result.data[0]
 
-    # Android'den gelen risk_profile öncelikli, yoksa DB'deki kullan
     risk_profile = risk_profile or user.get("risk_profile", "balanced")
 
     start_date = f"{year}-{month:02d}-01"
@@ -42,7 +43,7 @@ def recommend(user_id):
 
     transactions = tx_result.data
     if not transactions:
-        return jsonify({"error": "Bu ay için işlem bulunamadı"}), 404
+        return jsonify({"error": "Bu ay için işlem bulunamadı"}), 200
 
     total_income  = sum(t["amount"] for t in transactions if t["transaction_type"] == "INCOME")
     total_expense = sum(t["amount"] for t in transactions if t["transaction_type"] == "EXPENSE")
