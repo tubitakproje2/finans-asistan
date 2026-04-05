@@ -42,8 +42,13 @@ def analyze_spending(user_id):
 
     total_income  = sum(t["amount"] for t in transactions if t["transaction_type"] == "INCOME")
     total_expense = sum(t["amount"] for t in transactions if t["transaction_type"] == "EXPENSE")
-    net           = total_income - total_expense
-    savings_rate  = ((net / total_income) * 100) if total_income > 0 else 0
+
+    # İşlem bazlı gelir yoksa profil gelirini fallback olarak kullan
+    if total_income == 0:
+        total_income = float(user.get("monthly_income") or 0)
+
+    net          = total_income - total_expense
+    savings_rate = ((net / total_income) * 100) if total_income > 0 else 0
 
     category_breakdown = {}
     for t in transactions:
